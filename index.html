@@ -1,0 +1,346 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<title>PocketFlow</title>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: #0b1220;
+  color: white;
+}
+.container {
+  max-width: 420px;
+  margin: auto;
+  padding: 1rem;
+}
+#auth { text-align: center; margin-top: 5rem; }
+#auth input {
+  width: 80%; padding: 1rem; margin: 0.5rem;
+  border-radius: 10px; border: none;
+}
+#auth button {
+  padding: 0.8rem 1.5rem;
+  background: #3b82f6; border: none;
+  color: white; border-radius: 10px;
+}
+#app { display: none; }
+
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.title { font-size: 1.4rem; font-weight: 600; }
+
+.balance { text-align: center; margin-top: 1.5rem; }
+.balance h1 { font-size: 3rem; margin: 0; }
+
+.cards {
+  display: flex; gap: 1rem; margin-top: 1rem;
+}
+.card {
+  flex: 1; background: rgba(255,255,255,0.08);
+  padding: 1rem; border-radius: 10px; text-align: center;
+}
+
+.chart-box {
+  background: rgba(255,255,255,0.05);
+  padding: 1rem; border-radius: 10px;
+  margin-top: 1rem; height: 220px;
+}
+
+.actions {
+  display: flex; justify-content: space-between; margin-top: 1rem;
+}
+.circle {
+  width: 70px; height: 70px; border-radius: 50%;
+  border: none; font-size: 2rem; color: white;
+}
+.add { background: #22c55e; }
+.spend { background: #ef4444; }
+
+.history { margin-top: 1rem; }
+
+.item {
+  background: rgba(255,255,255,0.08);
+  padding: 1rem; border-radius: 10px;
+  margin-top: 0.5rem;
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+.left { display: flex; flex-direction: column; }
+.desc { font-weight: 600; }
+.date { font-size: 0.75rem; opacity: 0.6; }
+
+.income { color: #22c55e; }
+.expense { color: #ef4444; }
+
+.delete {
+  background: transparent; border: none;
+  color: white; font-size: 1rem;
+  margin-left: 10px; cursor: pointer;
+}
+
+.popup {
+  position: fixed; bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 100%; max-width: 420px;
+  background: #111827;
+  padding: 1rem;
+  border-radius: 16px 16px 0 0;
+  display: none;
+}
+
+.popup input {
+  width: 100%; padding: 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 10px; border: none;
+}
+
+.popup button {
+  width: 100%; padding: 1rem;
+  border: none; background: #3b82f6;
+  color: white; border-radius: 10px;
+}
+
+.header-controls {
+  display: flex; gap: 10px; align-items: center;
+}
+select, .logout {
+  padding: 6px 10px; border-radius: 8px;
+  border: none; color: white;
+}
+select { background: #1f2937; }
+.logout { background: #ef4444; cursor: pointer; }
+</style>
+</head>
+
+<body>
+
+<div id="auth">
+  <h2>PocketFlow</h2>
+  <input id="email" placeholder="Email">
+  <input id="pass" type="password" placeholder="Password">
+  <button onclick="signup()">Sign Up</button>
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="app" class="container">
+
+  <div class="header">
+    <div class="title">PocketFlow</div>
+
+    <div class="header-controls">
+      <select id="monthSelect" onchange="filterMonth()">
+        <option value="all">All History</option>
+        <option value="0">Jan</option>
+        <option value="1">Feb</option>
+        <option value="2">Mar</option>
+        <option value="3">Apr</option>
+        <option value="4">May</option>
+        <option value="5">Jun</option>
+        <option value="6">Jul</option>
+        <option value="7">Aug</option>
+        <option value="8">Sep</option>
+        <option value="9">Oct</option>
+        <option value="10">Nov</option>
+        <option value="11">Dec</option>
+      </select>
+
+      <button class="logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="balance">
+    <h1 id="balance">₹0</h1>
+    <p>Balance</p>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <p>Income</p>
+      <h3 id="income">₹0</h3>
+    </div>
+    <div class="card">
+      <p>Expense</p>
+      <h3 id="expense">₹0</h3>
+    </div>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="actions">
+    <button class="circle add" onclick="openPopup('income')">+</button>
+    <button class="circle spend" onclick="openPopup('expense')">−</button>
+  </div>
+
+  <div class="history" id="history"></div>
+</div>
+
+<div class="popup" id="popup">
+  <input id="desc" placeholder="Note">
+  <input id="amt" type="number" placeholder="Amount">
+  <button onclick="save()">Save</button>
+</div>
+
+<script>
+var firebaseConfig = {
+  apiKey: "AIzaSyBH-9HyiQ9vfjkdgPjWFfrvOhO8M0CCcoM",
+  authDomain: "pocket-flow-edb06.firebaseapp.com",
+  projectId: "pocket-flow-edb06"
+};
+
+firebase.initializeApp(firebaseConfig);
+var auth = firebase.auth();
+
+/* 🔥 DEFAULT CURRENT MONTH */
+let selectedMonth = new Date().getMonth().toString();
+
+let data = [];
+let type = "income";
+let chart = null;
+let userId = null;
+
+function signup(){ auth.createUserWithEmailAndPassword(email.value, pass.value); }
+function login(){ auth.signInWithEmailAndPassword(email.value, pass.value); }
+function logout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    userId = user.uid;
+    document.getElementById("auth").style.display="none";
+    document.getElementById("app").style.display="block";
+    load();
+  } else {
+    document.getElementById("auth").style.display="block";
+    document.getElementById("app").style.display="none";
+  }
+});
+
+function load(){
+  data = JSON.parse(localStorage.getItem(userId)) || [];
+
+  document.getElementById("monthSelect").value = selectedMonth;
+
+  update();
+  draw();
+}
+
+function save(){
+  let amount = Number(amt.value);
+  if(!amount) return;
+
+  data.push({
+    amt: amount,
+    type,
+    desc: desc.value || "Transaction",
+    date: new Date().toISOString()
+  });
+
+  localStorage.setItem(userId, JSON.stringify(data));
+
+  amt.value = "";
+  desc.value = "";
+
+  closePopup();
+  load();
+}
+
+function del(i){
+  data.splice(i,1);
+  localStorage.setItem(userId, JSON.stringify(data));
+  load();
+}
+
+function filterMonth(){
+  selectedMonth = document.getElementById("monthSelect").value;
+  update();
+  draw();
+}
+
+function update(){
+  let bal = 0, inc = 0, exp = 0;
+  let h = document.getElementById("history");
+  h.innerHTML = "";
+
+  data.forEach((i,index)=>{
+    let d = new Date(i.date);
+    let m = d.getMonth();
+
+    if(selectedMonth !== "all" && Number(selectedMonth) !== m) return;
+
+    if(i.type==="income"){bal+=i.amt;inc+=i.amt;}
+    else {bal-=i.amt;exp+=i.amt;}
+
+    let div = document.createElement("div");
+    div.className="item";
+
+    div.innerHTML=`
+      <div class="left">
+        <div class="desc">${i.desc}</div>
+        <div class="date">
+          ${d.toLocaleDateString('en-IN',{
+            day:'numeric',month:'short',year:'numeric'
+          })}
+        </div>
+      </div>
+      <div>
+        <span class="${i.type==='income'?'income':'expense'}">
+          ${i.type==='income'?'+':'-'}₹${i.amt}
+        </span>
+        <button class="delete" onclick="del(${index})">🗑</button>
+      </div>
+    `;
+    h.appendChild(div);
+  });
+
+  balance.innerText="₹"+bal;
+  income.innerText="₹"+inc;
+  expense.innerText="₹"+exp;
+}
+
+function draw(){
+  let inc = 0, exp = 0;
+
+  data.forEach(i=>{
+    let d = new Date(i.date);
+    let m = d.getMonth();
+
+    if(selectedMonth !== "all" && Number(selectedMonth) !== m) return;
+
+    if(i.type==="income") inc+=i.amt;
+    else exp+=i.amt;
+  });
+
+  if(chart) chart.destroy();
+
+  const ctx = document.getElementById("chart").getContext("2d");
+
+  chart = new Chart(ctx,{
+    type:"pie",
+    data:{
+      labels:["Income","Expense"],
+      datasets:[{
+        data:[inc,exp],
+        backgroundColor:["#22c55e","#ef4444"]
+      }]
+    }
+  });
+}
+
+function openPopup(t){ type=t; popup.style.display="block"; }
+function closePopup(){ popup.style.display="none"; }
+</script>
+
+</body>
+</html>
+```
